@@ -1,0 +1,3 @@
+vessel 0 c_max: 3.025   dt (ms) 1.686470 | res CFL: 0.500 || already best N
+vessel 1 c_max: 2.803   dt (ms) 3.716269 | res CFL: 0.227 || prop: N53    dN 28    dtNew 1.7152   CFL: 0.492
+vessel 2 c_max: 2.803   dt (ms) 3.716315 | res CFL: 0.227 || prop: N53    dN 28    dtNew 1.7152   CFL: 0.492
