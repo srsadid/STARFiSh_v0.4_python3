@@ -5,37 +5,167 @@ os.environ.setdefault('MPLCONFIGDIR', '/tmp/matplotlib-starfish')
 os.environ.setdefault('XDG_CACHE_HOME', '/tmp')
 os.environ.setdefault('NO_AT_BRIDGE', '1')
 warnings.filterwarnings('ignore', category=DeprecationWarning)
-try:
-    import gtk
-    import gobject
-    matplotlibBackend = 'GTKAgg'
-    from matplotlib.backends.backend_gtkagg import FigureCanvasGTKAgg as FigureCanvas
-    from matplotlib.backends.backend_gtkagg import NavigationToolbar2GTKAgg as NavigationToolbar
-except ImportError:
-    from gi import pygtkcompat
-    pygtkcompat.enable()
-    pygtkcompat.enable_gtk(version='3.0')
-    from gi.repository import GLib
-    import gtk
-    import gobject
-    matplotlibBackend = 'GTK3Agg'
-    from matplotlib.backends.backend_gtk3agg import FigureCanvasGTK3Agg as FigureCanvas
-    from matplotlib.backends.backend_gtk3 import NavigationToolbar2GTK3
-    class NavigationToolbar(NavigationToolbar2GTK3):
-        def __init__(self, canvas, window=None):
-            super(NavigationToolbar, self).__init__(canvas)
+import sys
+import os
+import sys
 
-        def configure_subplots(self, *args, **kwargs):
-            try:
-                return super(NavigationToolbar, self).configure_subplots(*args, **kwargs)
-            except Exception as error:
-                print("WARNING: subplot configuration dialog is unavailable: {}".format(error))
-else:
-    GLib = None
+DEBUG_VIZ = os.environ.get('STARFISH_VIZ_DEBUG', '').lower() in ('1', 'true', 'yes', 'on')
+DEBUG_VIZ_SAVE = os.environ.get('STARFISH_VIZ_DEBUG_SAVE', '').lower() in ('1', 'true', 'yes', 'on')
+def _debug_viz(message):
+    if DEBUG_VIZ:
+        print("[2dViz] {}".format(message))
+
+# macOS specific path fixes for GTK icons and Pixbufs
+if sys.platform == 'darwin':
+    prefix = sys.prefix
+    # Prefer a loaders cache in the venv, otherwise fall back to common system locations
+    venv_loader = os.path.join(prefix, 'lib', 'gdk-pixbuf-2.0', '2.10.0', 'loaders.cache')
+    brew_loader = '/opt/homebrew/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache'
+    usrlocal_loader = '/usr/local/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache'
+    chosen_loader = None
+    for candidate in (venv_loader, brew_loader, usrlocal_loader):
+        if os.path.exists(candidate):
+            chosen_loader = candidate
+            break
+    if chosen_loader:
+        os.environ['GDK_PIXBUF_MODULE_FILE'] = chosen_loader
+
+    # GTK data directories: prefer venv share, else Homebrew share
+    venv_share = os.path.join(prefix, 'share')
+    brew_share = '/opt/homebrew/share'
+    if os.path.exists(venv_share):
+        os.environ['GTK_DATA_PREFIX'] = prefix
+        os.environ['GTK_EXE_PREFIX'] = prefix
+        os.environ['XDG_DATA_DIRS'] = venv_share
+    elif os.path.exists(brew_share):
+        os.environ['GTK_DATA_PREFIX'] = '/opt/homebrew'
+        os.environ['GTK_EXE_PREFIX'] = '/opt/homebrew'
+        # preserve existing XDG_DATA_DIRS if present
+        existing_xdg = os.environ.get('XDG_DATA_DIRS', '')
+        os.environ['XDG_DATA_DIRS'] = brew_share + (':' + existing_xdg if existing_xdg else '')
+
+    
+import sys
+try:
+    import gobject, gtk, pango, pangocairo
+    import gtk.gdk
+    GLib = None # Legacy mode usually didn't use a standalone GLib
+except ImportError:
+    try:
+        import gi
+        gi.require_version('Gtk', '3.0')
+        gi.require_version('Pango', '1.0')
+        gi.require_version('PangoCairo', '1.0')
+        from gi.repository import GObject as gobject
+        from gi.repository import Gtk as gtk
+        from gi.repository import Gdk as gdk
+        from gi.repository import Pango as pango
+        from gi.repository import PangoCairo as pangocairo
+        from gi.repository import GLib as GLib  # <--- Add this line
+        
+        # 1. Improved Safe Box Packing Shim
+        _orig_pack_start = gi.repository.Gtk.Box.pack_start
+        _orig_pack_end = gi.repository.Gtk.Box.pack_end
+        def _patched_pack_start(self, child, expand=True, fill=True, padding=0):
+            return _orig_pack_start(self, child, expand, fill, padding)
+        def _patched_pack_end(self, child, expand=True, fill=True, padding=0):
+            return _orig_pack_end(self, child, expand, fill, padding)
+        gi.repository.Gtk.Box.pack_start = _patched_pack_start
+        gi.repository.Gtk.Box.pack_end = _patched_pack_end
+
+        # 2. Map Constants and Responses
+        gtk.WIN_POS_CENTER = gi.repository.Gtk.WindowPosition.CENTER
+        gtk.FILE_CHOOSER_ACTION_OPEN = gi.repository.Gtk.FileChooserAction.OPEN
+        gtk.RESPONSE_OK = gi.repository.Gtk.ResponseType.OK
+        gtk.RESPONSE_CANCEL = gi.repository.Gtk.ResponseType.CANCEL
+        gtk.STOCK_CANCEL, gtk.STOCK_OPEN = "gtk-cancel", "gtk-open"
+
+        # 3. Gdk Constant Shim
+        class GdkShim:
+            def __init__(self, real_gdk): self.__dict__['_real'] = real_gdk
+            def __getattr__(self, name):
+                if hasattr(gi.repository.Gdk.EventMask, name): return getattr(gi.repository.Gdk.EventMask, name)
+                return getattr(self._real, name)
+        gtk.gdk = GdkShim(gdk)
+        
+        # 4. Global Injection
+        sys.modules['gobject'], sys.modules['gtk'], sys.modules['pango'] = gobject, gtk, pango
+        sys.modules['pangocairo'], sys.modules['gtk.gdk'] = pangocairo, gtk.gdk
+        sys.modules['GLib'] = GLib # Ensure other files can find GLib too
+        
+    except (ImportError, ValueError):
+        print("GTK3 Error: Ensure gobject-introspection and pygobject are installed.")
+        raise
+
+# macOS specific path fixes for GTK icons and Pixbufs
+if sys.platform == 'darwin':
+    prefix = sys.prefix
+    # Prefer a loaders cache in the venv, otherwise fall back to common system locations
+    venv_loader = os.path.join(prefix, 'lib', 'gdk-pixbuf-2.0', '2.10.0', 'loaders.cache')
+    brew_loader = '/opt/homebrew/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache'
+    usrlocal_loader = '/usr/local/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache'
+    chosen_loader = None
+    for candidate in (venv_loader, brew_loader, usrlocal_loader):
+        if os.path.exists(candidate):
+            chosen_loader = candidate
+            break
+    if chosen_loader:
+        os.environ['GDK_PIXBUF_MODULE_FILE'] = chosen_loader
+
+    # GTK data directories: prefer venv share, else Homebrew share
+    venv_share = os.path.join(prefix, 'share')
+    brew_share = '/opt/homebrew/share'
+    if os.path.exists(venv_share):
+        os.environ['GTK_DATA_PREFIX'] = prefix
+        os.environ['GTK_EXE_PREFIX'] = prefix
+        os.environ['XDG_DATA_DIRS'] = venv_share
+    elif os.path.exists(brew_share):
+        os.environ['GTK_DATA_PREFIX'] = '/opt/homebrew'
+        os.environ['GTK_EXE_PREFIX'] = '/opt/homebrew'
+        # preserve existing XDG_DATA_DIRS if present
+        existing_xdg = os.environ.get('XDG_DATA_DIRS', '')
+        os.environ['XDG_DATA_DIRS'] = brew_share + (':' + existing_xdg if existing_xdg else '')
+
 import matplotlib
-matplotlib.use(matplotlibBackend)
+# Prefer GTK3Cairo on macOS, fallback to GTK3Agg, then Agg
+if sys.platform == 'darwin':
+    try:
+        matplotlib.use('GTK3Cairo')
+    except Exception:
+        try:
+            matplotlib.use('GTK3Agg')
+        except Exception:
+            matplotlib.use('Agg')
+else:
+    try:
+        matplotlib.use('GTK3Agg')
+    except Exception:
+        matplotlib.use('Agg')
+
+# Define the variable to satisfy any other references in the code
+matplotlibBackend = matplotlib.get_backend()
 import matplotlib.pyplot as plt   
 from matplotlib.figure import Figure
+
+import matplotlib.pyplot as plt   
+from matplotlib.figure import Figure
+
+# Explicitly import the GTK3 canvas and toolbar for standalone compatibility
+try:
+    if matplotlib.get_backend().lower().endswith('gtk3cairo'):
+        from matplotlib.backends.backend_gtk3cairo import FigureCanvasGTK3Cairo as FigureCanvas
+        from matplotlib.backends.backend_gtk3 import NavigationToolbar2GTK3 as NavigationToolbar
+    else:
+        from matplotlib.backends.backend_gtk3agg import FigureCanvasGTK3Agg as FigureCanvas
+        from matplotlib.backends.backend_gtk3agg import NavigationToolbar2GTK3 as NavigationToolbar
+except ImportError:
+    # Fallback for standard GTK3 if Agg/Cairo is specifically problematic
+    from matplotlib.backends.backend_gtk3 import FigureCanvasGTK3 as FigureCanvas
+    from matplotlib.backends.backend_gtk3 import NavigationToolbar2GTK3 as NavigationToolbar
+
+from matplotlib.font_manager import FontProperties
+from matplotlib.patches import Rectangle
+
 # uncomment to select /GTK/GTKAgg/GTKCairo
 # from matplotlib.backends.backend_gtk import FigureCanvasGTK as FigureCanvas
 # from matplotlib.backends.backend_gtkcairo import FigureCanvasGTKCairo as FigureCanvas
@@ -158,7 +288,7 @@ class Visualisation2DPlotWindowAdjustValues(gtk.Window):
             
         self.add(vbox)
         self.show_all()
-        
+        # No matplotlib canvas in this dialog
     def on_clickedUpdate(self, widget):
         '''
         update dictionary from data 
@@ -290,7 +420,7 @@ class Visualisation2DPlotWindowGui(gtk.Window):
         height = 500 #690
         self.canvas.set_size_request(width, height)
         
-        toolbar = NavigationToolbar(self.canvas, self)
+        toolbar = NavigationToolbar(self.canvas)
         
         cbType = newTextComboBox()
         cbType.append_text('Plot P,Q')
@@ -329,20 +459,24 @@ class Visualisation2DPlotWindowGui(gtk.Window):
         hboxCheckboxes2.pack_start(self.buttonLines)  
 
         # align pictures canvas
-        alignIm = gtk.Alignment(0, 1 , 1, 0)
+        alignIm = gtk.Alignment()
+        alignIm.set(0, 1, 1, 0)
         alignIm.add(self.canvas)
         # align node switcher scale
         hbox.pack_start(self.nodeLabel)
         hbox.pack_start(self.scale)
-        alignHbox = gtk.Alignment(0, 1, 1, 0)
+        alignHbox = gtk.Alignment()
+        alignHbox.set(0, 1, 1, 0)
         alignHbox.add(hbox)
         # align combobox
         hbox2.pack_start(cbType)
         hbox2.pack_start(self.cbXaxis)
-        alignCB = gtk.Alignment(0, 1, 1, 0)  
+        alignCB = gtk.Alignment()
+        alignCB.set(0, 1, 1, 0)
         alignCB.add(hbox2)
         # align navigation toolbox
-        alignNT = gtk.Alignment(0, 1, 1, 0)  
+        alignNT = gtk.Alignment()
+        alignNT.set(0, 1, 1, 0)
         alignNT.add(toolbar)
         
         # put all together
@@ -355,6 +489,31 @@ class Visualisation2DPlotWindowGui(gtk.Window):
         
         self.add(vbox)         
         self.show_all()
+        self.canvas.draw() # Force the pixel buffer to update
+        self.canvas.queue_draw() # Tell macOS to repaint the widget
+        self._schedule_redraw()
+
+    def _schedule_redraw(self):
+        # Defer a draw until GTK has finished realizing the window/canvas
+        try:
+            if GLib is not None:
+                GLib.idle_add(self._force_redraw)
+            else:
+                gobject.idle_add(self._force_redraw)
+        except Exception:
+            self._force_redraw()
+
+    def _force_redraw(self):
+        try:
+            self.canvas.draw()
+            self.canvas.queue_draw()
+            try:
+                self.canvas.flush_events()
+            except Exception:
+                pass
+        except Exception as exc:
+            _debug_viz('force redraw failed: {}'.format(exc))
+        return False
             
     def on_changePlotXaxis(self, widget):
         pass
@@ -634,6 +793,21 @@ class Visualisation2DPlotWindow(Visualisation2DPlotWindowGui):
         self.canvas.figure = self.fig
         self.fig.set_canvas(self.canvas)
         self.canvas.queue_resize()        
+        try:
+            self.canvas.draw_idle()
+        except Exception:
+            self.canvas.draw()
+        try:
+            self.canvas.queue_draw()
+            self.canvas.flush_events()
+        except Exception:
+            pass
+        if DEBUG_VIZ_SAVE:
+            try:
+                self.fig.savefig('/tmp/starfish_2d_debug.png')
+                _debug_viz('saved /tmp/starfish_2d_debug.png')
+            except Exception as exc:
+                _debug_viz('savefig failed: {}'.format(exc))
                 
     def updateLegend(self):
         '''
@@ -705,18 +879,30 @@ class Visualisation2DPlotWindow(Visualisation2DPlotWindowGui):
             
             if self.axisX == 'Time':               
                 try:
-                    yData00 = vascularNetwork.vessels[vesselId].Psol[:, [gridNode]] / 133.32
-                    ydata10 = vascularNetwork.vessels[vesselId].Qsol[:, [gridNode]] * 1e6    
+                    vessel = vascularNetwork.vessels[vesselId]
+                    if vessel.Psol.size == 0 or vessel.Qsol.size == 0:
+                        raise ValueError("empty solution arrays")
+                    if vascularNetwork.tsol.size == 0:
+                        raise ValueError("empty time vector")
+                    if gridNode >= vessel.Psol.shape[1]:
+                        raise IndexError("gridNode out of range")
+
+                    yData00 = vessel.Psol[:, [gridNode]] / 133.32
+                    ydata10 = vessel.Qsol[:, [gridNode]] * 1e6    
                     xData = vascularNetwork.tsol
                                                            
                     self.lines[i]['axis1']['-'].set_data(xData, yData00)
                     self.lines[i]['axis2']['-'].set_data(xData, ydata10)
+                    _debug_viz('PQ time vessel {}: x={} yP={} yQ={}'.format(
+                        vesselId, len(xData), yData00.shape, ydata10.shape
+                    ))
         
                     self.axis['axis1'].set_xlim(self.limits['Time'])
                     self.axis['axis2'].set_xlabel('Time $s$', fontsize=self.fontSizeLabel)
                     self.axis['axis2'].set_xlim(self.limits['Time'])
                     
-                except:
+                except Exception as exc:
+                    _debug_viz("updateLinesPQ(Time) vessel {}: {}".format(vesselId, exc))
                     self.lines[i]['axis1']['-'].set_data([-1], [0])
                     self.lines[i]['axis2']['-'].set_data([-1], [0])
                     
@@ -736,17 +922,27 @@ class Visualisation2DPlotWindow(Visualisation2DPlotWindowGui):
             
             elif self.axisX == "Space":
                 try: 
-                    yData00 = vascularNetwork.vessels[vesselId].Psol[gridNode] / 133.32
-                    ydata10 = vascularNetwork.vessels[vesselId].Qsol[gridNode] * 1e6    
-                    xData = np.linspace(0, vascularNetwork.vessels[vesselId].length, len(yData00)) * 100.
+                    vessel = vascularNetwork.vessels[vesselId]
+                    if vessel.Psol.size == 0 or vessel.Qsol.size == 0:
+                        raise ValueError("empty solution arrays")
+                    if gridNode >= vessel.Psol.shape[0]:
+                        raise IndexError("gridNode out of range")
+
+                    yData00 = vessel.Psol[gridNode] / 133.32
+                    ydata10 = vessel.Qsol[gridNode] * 1e6    
+                    xData = np.linspace(0, vessel.length, len(yData00)) * 100.
                     
                     self.lines[i]['axis1']['-'].set_data(xData, yData00)
                     self.lines[i]['axis2']['-'].set_data(xData, ydata10)      
+                    _debug_viz('PQ space vessel {}: x={} yP={} yQ={}'.format(
+                        vesselId, len(xData), yData00.shape, ydata10.shape
+                    ))
                                         
                     self.axis['axis1'].set_xlim(self.limits['Space'])
                     self.axis['axis2'].set_xlabel('Space $cm$', fontsize=self.fontSizeLabel)
                     self.axis['axis2'].set_xlim(self.limits['Space'])                                  
-                except:
+                except Exception as exc:
+                    _debug_viz("updateLinesPQ(Space) vessel {}: {}".format(vesselId, exc))
                     self.lines[i]['axis1']['-'].set_data([-1], [0])
                     self.lines[i]['axis2']['-'].set_data([-1], [0])
                     

@@ -53,7 +53,11 @@ class WindowLUT(pyglet.window.Window):
         for i in range(7):
             self.scaleText.append(pyglet.text.Label('125.00', anchor_x='right', anchor_y='center',color=(0, 0, 0, 255)))
             
-        self.quantity = pyglet.text.Label('Pressure', anchor_x='left', anchor_y='bottom',color=(0, 0, 0, 255), weight='bold')
+        try:
+            self.quantity = pyglet.text.Label('Pressure', anchor_x='left', anchor_y='bottom',color=(0, 0, 0, 255), weight='bold')
+        except TypeError:
+            # pyglet 1.x doesn't support the weight kwarg
+            self.quantity = pyglet.text.Label('Pressure', anchor_x='left', anchor_y='bottom',color=(0, 0, 0, 255))
         self.unit     = pyglet.text.Label('mmHg', anchor_x='right', anchor_y='bottom',color=(0, 0, 0, 255), font_size = 10 )
         self.unitFactor = 1./133.32
         
@@ -112,7 +116,7 @@ class WindowLUT(pyglet.window.Window):
         colors = np.repeat([np.array([0, 255, 0])], self.numberOfVertices*2, axis = 0).ravel()        
         
         
-        self.vertexList = self.batch.add_indexed(len(vertices)/2,  pyglet.gl.GL_QUADS, None, 
+        self.vertexList = self.batch.add_indexed(int(len(vertices) / 2),  pyglet.gl.GL_QUADS, None, 
                                                  indices,
                                                  ('v2f/static',vertices),
                                                  ('c3B/dynamic',colors))

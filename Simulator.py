@@ -1,5 +1,10 @@
 ##!/usr/bin/env python
 # -*- coding: utf-8 -*- 
+import warnings
+
+# Silence h5py warnings by matching the start of the message
+warnings.filterwarnings("ignore", message="Creating a dataset without passing data or dtype is deprecated")
+
 import time 
 import sys,os
 # set the path relative to THIS file not the executing file!

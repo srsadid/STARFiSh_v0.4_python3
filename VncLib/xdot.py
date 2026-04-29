@@ -20,8 +20,6 @@
 
 __author__ = "Jose Fonseca"
 
-__version__ = "0.4"
-
 
 import os
 import sys
@@ -31,22 +29,70 @@ import colorsys
 import time
 import re
 
+
+import sys
+
 try:
     import gobject
     import gtk
     import gtk.gdk
-    import gtk.keysyms
+    import pango
+    import pangocairo
 except ImportError:
-    from gi import pygtkcompat
-    pygtkcompat.enable()
-    pygtkcompat.enable_gtk(version='3.0')
-    import gobject
-    import gtk
-    import gtk.gdk
-    import gtk.keysyms
-import cairo
-import pango
-import pangocairo
+    try:
+        import gi
+        gi.require_version('Gtk', '3.0')
+        gi.require_version('Pango', '1.0')
+        gi.require_version('PangoCairo', '1.0')
+        from gi.repository import GObject as gobject
+        from gi.repository import Gtk as gtk
+        from gi.repository import Gdk as gdk
+        from gi.repository import Pango as pango
+        from gi.repository import PangoCairo as pangocairo
+        
+        # 1. Gdk Constant Shim
+        class GdkShim:
+            def __init__(self, real_gdk):
+                self.__dict__['_real'] = real_gdk
+            def __getattr__(self, name):
+                if hasattr(gi.repository.Gdk.EventMask, name):
+                    return getattr(gi.repository.Gdk.EventMask, name)
+                if not name.endswith('_MASK'):
+                    mask_name = name + '_MASK'
+                    if hasattr(gi.repository.Gdk.EventMask, mask_name):
+                        return getattr(gi.repository.Gdk.EventMask, mask_name)
+                return getattr(self._real, name)
+
+        # 2. Box Packing Shim (Safe Version)
+        _orig_pack_start = gi.repository.Gtk.Box.pack_start
+        _orig_pack_end = gi.repository.Gtk.Box.pack_end
+        
+        gi.repository.Gtk.Box.pack_start = lambda self, c, e=True, f=True, p=0: _orig_pack_start(self, c, e, f, p)
+        gi.repository.Gtk.Box.pack_end = lambda self, c, e=True, f=True, p=0: _orig_pack_end(self, c, e, f, p)
+
+        # 3. Apply Namespace Shims
+        gtk.gdk = GdkShim(gdk)
+        sys.modules['gobject'] = gobject
+        sys.modules['gtk'] = gtk
+        sys.modules['gtk.gdk'] = gtk.gdk
+        sys.modules['pango'] = pango
+        sys.modules['pangocairo'] = pangocairo
+        
+        # 4. Constant & Type Fixes
+        if not hasattr(gobject, 'SIGNAL_RUN_LAST'): gobject.SIGNAL_RUN_LAST = 1
+        if not hasattr(gobject, 'TYPE_NONE'): gobject.TYPE_NONE = gobject.TYPE_INVALID if hasattr(gobject, 'TYPE_INVALID') else None
+        if not hasattr(gobject, 'TYPE_STRING'): gobject.TYPE_STRING = gobject.TYPE_STRV if hasattr(gobject, 'TYPE_STRV') else None
+
+        class KeysymsShim:
+            def __getattr__(self, name):
+                return getattr(gi.repository.Gdk, 'KEY_' + name, None)
+        gtk.keysyms = KeysymsShim()
+        
+    except (ImportError, ValueError) as e:
+        print("ERROR: GTK3 libraries not found.")
+        raise e
+
+        
 
 from pprint import pprint as pp
 

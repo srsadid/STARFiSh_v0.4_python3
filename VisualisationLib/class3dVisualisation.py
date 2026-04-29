@@ -29,6 +29,17 @@ from OpenGL.GL import *
 from OpenGL.GLU import *
 
 import pyglet
+import pyglet.canvas
+
+# macOS: request a legacy OpenGL context when available (fixed-function pipeline)
+try:
+    if 'legacy_gl' in pyglet.options:
+        pyglet.options['legacy_gl'] = True
+    if 'shadow_window' in pyglet.options:
+        pyglet.options['shadow_window'] = False
+except Exception:
+    pass
+
 from pyglet.gl import *
 from pyglet import *
 from pyglet.window import mouse, key
@@ -52,22 +63,42 @@ class Visualisation3DGUI(pyglet.window.Window):
         samples         = 4
         sample_buffers  = 1
 
-        if hasattr(pyglet.window, 'get_platform'):
+        # Display selection across pyglet 1.x/2.x APIs
+        try:
             platform = pyglet.window.get_platform()
             display = platform.get_default_display()
-        else:
-            display = pyglet.display.get_display()
+        except Exception:
+            try:
+                display = pyglet.canvas.get_display()
+            except Exception:
+                display = pyglet.display.get_display()
         screen = display.get_default_screen()
 
-        templateHigh = pyglet.gl.Config(sample_buffers=sample_buffers,
-                                    samples = samples,
-                                    double_buffer=True,
-                                    depth_size = depth_size,
-                                    stencil_size = stencil_size)
+        def _make_config(**kwargs):
+            try:
+                return pyglet.gl.Config(**kwargs)
+            except TypeError:
+                # Fallback for pyglet versions that do not accept GL version hints
+                kwargs.pop('major_version', None)
+                kwargs.pop('minor_version', None)
+                kwargs.pop('forward_compatible', None)
+                return pyglet.gl.Config(**kwargs)
 
-        templateLow = pyglet.gl.Config(sample_buffers=0,
-                                    double_buffer=False,
-                                    depth_size = 16)
+        templateHigh = _make_config(sample_buffers=sample_buffers,
+                                    samples=samples,
+                                    double_buffer=True,
+                                    depth_size=depth_size,
+                                    stencil_size=stencil_size,
+                                    major_version=2,
+                                    minor_version=1,
+                                    forward_compatible=False)
+
+        templateLow = _make_config(sample_buffers=0,
+                                   double_buffer=False,
+                                   depth_size=16,
+                                   major_version=2,
+                                   minor_version=1,
+                                   forward_compatible=False)
 
         try:
             config = screen.get_best_config(templateHigh)
@@ -84,6 +115,12 @@ class Visualisation3DGUI(pyglet.window.Window):
         context = config.create_context(None)
 
         super(Visualisation3DGUI, self).__init__(resizable = True, context = context)
+
+        # Ensure the OpenGL context is current before any GL calls
+        try:
+            self.switch_to()
+        except Exception:
+            pass
 
         self.set_maximum_size(screen.width, screen.height)
         self.set_minimum_size(self.width, self.height)
@@ -679,7 +716,7 @@ class Visualisation3D(Visualisation3DGUI):
         # creat 3d vessel representations
 
         self.createVessel3D()
-        start = time.clock()
+        start = time.perf_counter()
         # apply number total timesteps
         self.timeStepsTotal = len(self.vascularNetwork.vessels[self.vascularNetwork.root].Psol)
 
@@ -910,9 +947,9 @@ class Visualisation3D(Visualisation3DGUI):
         timeSolverSolve = []
         self.timeStepCurrent = int(self.timeStepsTotal/2.)
         for i in range(int(numberOfUpdates)):
-            timeSolverSolveStart = time.clock()
+            timeSolverSolveStart = time.perf_counter()
             self.updateVisualisation(0.0)
-            timeSolverSolve.append(time.clock()-timeSolverSolveStart)
+            timeSolverSolve.append(time.perf_counter()-timeSolverSolveStart)
 
         approximatedFrameRateUpdate = (1./(sum(timeSolverSolve[2::])/(numberOfUpdates-2)))-1
 
@@ -1258,13 +1295,13 @@ class Vessel3D(Vessel):
         vertices = vertices.ravel()
         normals  = normals.ravel()
 
-        self.vertexList = self.batch.add_indexed(len(vertices)/3,  pyglet.gl.GL_QUADS, None, indeces,
+        self.vertexList = self.batch.add_indexed(int(len(vertices) / 3),  pyglet.gl.GL_QUADS, None, indeces,
                                                  ('v3f/stream',vertices),
                                                  ('n3f/stream',normals),
                                                  ('c3B/stream',color))
 
         if self.viewNormals == True:
-            self.vertexList2 = self.batch.add_indexed(len(normalLines)/3,  pyglet.gl.GL_LINES, None,normalLineIndeces,
+            self.vertexList2 = self.batch.add_indexed(int(len(normalLines) / 3),  pyglet.gl.GL_LINES, None,normalLineIndeces,
                                               ('v3f/stream',normalLines))
 
 

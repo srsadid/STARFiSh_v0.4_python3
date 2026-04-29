@@ -63,7 +63,7 @@ def runSingleBatchSimulation(batchData):
     networkXmlFileSave       = batchData['networkXmlFileSave']
     pathSolutionDataFilename = batchData['pathSolutionDataFilename']
     try:
-        timeStart = time.clock()
+        timeStart = time.perf_counter()
         #simulationIndex          = batchData['simulationIndex']
         
         vascularNetworkTemp = moduleXML.loadNetworkFromXML(networkName, dataNumber, networkXmlFile = networkXmlFileLoad, pathSolutionDataFilename = pathSolutionDataFilename)
@@ -74,7 +74,7 @@ def runSingleBatchSimulation(batchData):
         moduleXML.writeNetworkToXML(vascularNetworkTemp, dataNumber, networkXmlFileSave)
         del flowSolver
         gc.collect()
-        timeSolverSolve = time.clock()-timeStart
+        timeSolverSolve = time.perf_counter()-timeStart
         minutesSolve = int(timeSolverSolve/60.)
         secsSolve = timeSolverSolve-minutesSolve*60.
     except:
