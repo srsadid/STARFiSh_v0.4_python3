@@ -1,0 +1,139 @@
+<?xml version='1.0' encoding='ISO-8859-1'?>
+<vascularNetwork id="xxx" version="4.3">
+  <simulationContext>
+    <description></description>
+    <totalTime unit="s">1.0</totalTime>
+    <CFL>0.85</CFL>
+    <timeSaveBegin unit="s">0.0</timeSaveBegin>
+    <minSaveDt unit="s">-1.0</minSaveDt>
+    <maxMemory unit="MB">20.0</maxMemory>
+    <gravitationalField>False</gravitationalField>
+    <gravityConstant unit="m s-2">-9.81</gravityConstant>
+  </simulationContext>
+  <solverCalibration>
+    <solvingSchemeField>MacCormack_Flux</solvingSchemeField>
+    <rigidAreas>False</rigidAreas>
+    <simplifyEigenvalues>False</simplifyEigenvalues>
+    <riemannInvariantUnitBase>Pressure</riemannInvariantUnitBase>
+    <automaticGridAdaptation>True</automaticGridAdaptation>
+  </solverCalibration>
+  <initialisationControls>
+    <initialsationMethod>Auto</initialsationMethod>
+    <initMeanFlow unit="m3 s-1">0.0</initMeanFlow>
+    <initMeanPressure unit="Pa">0.0</initMeanPressure>
+    <estimateWindkesselCompliance>Tree</estimateWindkesselCompliance>
+    <compPercentageWK3>0.3</compPercentageWK3>
+    <compPercentageTree>0.8</compPercentageTree>
+    <compTotalSys unit="m3 Pa-1">5.0</compTotalSys>
+  </initialisationControls>
+  <globalFluid>
+    <my unit="Pa s">1e-06</my>
+    <rho unit="kg m-3">1050.0</rho>
+    <gamma>2.0</gamma>
+  </globalFluid>
+  <externalStimuli/>
+  <communicators/>
+  <boundaryConditions>
+    <boundaryCondition vesselId="1">
+      <Flow-Sinus>
+        <amp unit="m3 s-1">0</amp>
+        <ampConst unit="m3 s-1">0</ampConst>
+        <Npulse>1.0</Npulse>
+        <Tpulse unit="s">0.0</Tpulse>
+        <freq unit="s-1">1.0</freq>
+        <Tspace unit="s">0.0</Tspace>
+        <runtimeEvaluation>False</runtimeEvaluation>
+        <prescribe>influx</prescribe>
+      </Flow-Sinus>
+    </boundaryCondition>
+  </boundaryConditions>
+  <randomInputManager/>
+  <measurementRoutine/>
+  <vessels>
+    <vessel Id="1" name="MainArtery">
+      <topology>
+        <leftDaughter>2</leftDaughter>
+        <rightDaughter>3</rightDaughter>
+        <angleYMother unit="rad">0.0</angleYMother>
+      </topology>
+      <geometry>
+        <geometryType>uniform</geometryType>
+        <length unit="m">0.015</length>
+        <radiusProximal unit="m">0.00126156626101008</radiusProximal>
+        <radiusDistal unit="m">0.00126156626101008</radiusDistal>
+        <N>50</N>
+      </geometry>
+      <compliance>
+        <complianceType>Hayashi</complianceType>
+        <constantCompliance>False</constantCompliance>
+        <externalPressure unit="Pa">0.0</externalPressure>
+        <Ps unit="Pa">0.0</Ps>
+        <As unit="m2">None</As>
+        <betaHayashi>1.0</betaHayashi>
+      </compliance>
+      <fluid>
+        <applyGlobalFluid>True</applyGlobalFluid>
+        <my unit="Pa s">1e-06</my>
+        <rho unit="kg m-3">1050.0</rho>
+        <gamma>2.0</gamma>
+      </fluid>
+    </vessel>
+    <vessel Id="2" name="LeftBranch">
+      <topology>
+        <leftDaughter>None</leftDaughter>
+        <rightDaughter>None</rightDaughter>
+        <angleYMother unit="rad">0.0</angleYMother>
+      </topology>
+      <geometry>
+        <geometryType>uniform</geometryType>
+        <length unit="m">0.008</length>
+        <radiusProximal unit="m">0.00126156626101008</radiusProximal>
+        <radiusDistal unit="m">0.00126156626101008</radiusDistal>
+        <N>50</N>
+      </geometry>
+      <compliance>
+        <complianceType>Hayashi</complianceType>
+        <constantCompliance>False</constantCompliance>
+        <externalPressure unit="Pa">0.0</externalPressure>
+        <Ps unit="Pa">0.0</Ps>
+        <As unit="m2">None</As>
+        <betaHayashi>1.0</betaHayashi>
+      </compliance>
+      <fluid>
+        <applyGlobalFluid>True</applyGlobalFluid>
+        <my unit="Pa s">1e-06</my>
+        <rho unit="kg m-3">1050.0</rho>
+        <gamma>2.0</gamma>
+      </fluid>
+    </vessel>
+    <vessel Id="3" name="RightBranch">
+      <topology>
+        <leftDaughter>None</leftDaughter>
+        <rightDaughter>None</rightDaughter>
+        <angleYMother unit="rad">0.0</angleYMother>
+      </topology>
+      <geometry>
+        <geometryType>uniform</geometryType>
+        <length unit="m">0.012</length>
+        <radiusProximal unit="m">0.00126156626101008</radiusProximal>
+        <radiusDistal unit="m">0.00126156626101008</radiusDistal>
+        <N>50</N>
+      </geometry>
+      <compliance>
+        <complianceType>Hayashi</complianceType>
+        <constantCompliance>False</constantCompliance>
+        <externalPressure unit="Pa">0.0</externalPressure>
+        <Ps unit="Pa">0.0</Ps>
+        <As unit="m2">None</As>
+        <betaHayashi>1.0</betaHayashi>
+      </compliance>
+      <fluid>
+        <applyGlobalFluid>True</applyGlobalFluid>
+        <my unit="Pa s">1e-06</my>
+        <rho unit="kg m-3">1050.0</rho>
+        <gamma>2.0</gamma>
+      </fluid>
+    </vessel>
+  </vessels>
+  <venousPool/>
+</vascularNetwork>
