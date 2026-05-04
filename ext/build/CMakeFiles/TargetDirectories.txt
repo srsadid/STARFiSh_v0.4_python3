@@ -1,0 +1,4 @@
+/home/sadid/starfish/ext/build/CMakeFiles/crimson_starfish_bridge.dir
+/home/sadid/starfish/ext/build/CMakeFiles/nanobind-static.dir
+/home/sadid/starfish/ext/build/CMakeFiles/edit_cache.dir
+/home/sadid/starfish/ext/build/CMakeFiles/rebuild_cache.dir
