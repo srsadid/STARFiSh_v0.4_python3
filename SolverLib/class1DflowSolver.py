@@ -495,7 +495,7 @@ class FlowSolver(cSBO.StarfishBaseObject):
         """
         if self.quiet == False:
             logger.info("Solving system ...")
-            progressBar = cPB.ProgressBar(35,self.nTSteps, subpressPrint = self.quiet)
+            progressLog = cPB.CrimsonStyleProgress(self.nTSteps, self.dt)
 
         reflectionCoefficientCount = 0
         maxRef = 0
@@ -507,7 +507,7 @@ class FlowSolver(cSBO.StarfishBaseObject):
                 self.currentMemoryIndex[0] = n - self.memoryOffset[0]
                 
                 if self.quiet == False:
-                    progressBar.progress(n)
+                    progressLog.progress(n)
                 
                 for numericalObject in self.numericalObjects:
                     try:
@@ -522,7 +522,7 @@ class FlowSolver(cSBO.StarfishBaseObject):
                         # self.exception()
                 
                 if self.quiet == False:
-                    progressBar.progress(n)
+                    progressLog.progress(n)
                 
         ## to be concentrated with original cycle mode !!
         else:

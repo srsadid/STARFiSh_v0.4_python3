@@ -52,9 +52,9 @@ class StarfishBaseObject(classConfigurableObjectBase.ConfigurableObjectBase):
             if key in self.solutionMemoryFieldsToSave:
                 try:
                     size = data.shape[1]
-                    self.dsetGroup.create_dataset(key,(savedArraySize,size))
+                    self.dsetGroup.create_dataset(key, (savedArraySize, size), dtype=data.dtype)
                 except IndexError:
-                    self.dsetGroup.create_dataset(key,(savedArraySize,))
+                    self.dsetGroup.create_dataset(key, (savedArraySize,), dtype=data.dtype)
     
     def loadFileDataBuffers(self,dsetGroup,nSelectedBegin,nSelectedEnd,nTStepSpaces):
         for key in self.solutionMemoryFields:
@@ -149,7 +149,6 @@ class StarfishBaseObject(classConfigurableObjectBase.ConfigurableObjectBase):
             try: raise
             except Exception as e:
                 raise type(e)(str(e) + "\nAppended : " + infoString).with_traceback(sys.exc_info()[2])
-
 
 
 

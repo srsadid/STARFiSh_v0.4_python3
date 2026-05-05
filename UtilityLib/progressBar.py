@@ -3,6 +3,62 @@
 
 import sys
 import io
+import logging
+import time
+
+
+class CrimsonStyleProgress(object):
+    """
+    Line-based solver progress output, modelled after CRIMSON-style iteration logs.
+
+    This deliberately avoids rewriting stdout in place. Every update is a normal
+    log line, so output is stable in terminals, batch jobs, and log files.
+    """
+    def __init__(self, nIterations, dt, logEvery=None, loggerName='starfish'):
+        self.nIterations = max(int(nIterations), 1)
+        self.dt = float(dt)
+        self.logEvery = logEvery or max(1, self.nIterations // 50)
+        self.logger = logging.getLogger(loggerName)
+        self.startTime = time.perf_counter()
+        self.lastLogged = None
+        self.logger.info(" iter   sim_time   progress  ( pct)      dt          wall_s    < step-total| rem> [ mem - cyc]")
+
+    def progress(self, currentIteration):
+        currentIteration = int(currentIteration)
+        if self.lastLogged == currentIteration:
+            return
+
+        finalIteration = self.nIterations - 1
+        shouldLog = (
+            currentIteration == 0 or
+            currentIteration >= finalIteration or
+            self.lastLogged is None or
+            currentIteration - self.lastLogged >= self.logEvery
+        )
+        if not shouldLog:
+            return
+
+        self.lastLogged = currentIteration
+        simTime = currentIteration * self.dt
+        progress = float(currentIteration + 1) / float(self.nIterations)
+        wallTime = time.perf_counter() - self.startTime
+        remaining = max(finalIteration - currentIteration, 0)
+        percent = int(round(progress * 100.0))
+
+        self.logger.info(
+            "%5d %9.3E %9.3E  (%4d) %11.3E %11.3E  <%6d-%-5d|%4d> [%4d -%4d]",
+            1,
+            simTime,
+            progress,
+            percent,
+            self.dt,
+            wallTime,
+            currentIteration + 1,
+            self.nIterations,
+            remaining,
+            0,
+            0,
+        )
 
 class ProgressBar(object):
     """

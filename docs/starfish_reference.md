@@ -599,3 +599,66 @@ targets, and measured data before the solver turns XML boundary data into numeri
 `Boundary` objects. If the smart BC needs state during time stepping, the next target is
 `NetworkLib/classBoundaryConditions.py`: add or modify a boundary-condition class and
 register its XML tag in `UtilityLib/networkXml043.py`.
+
+## External Case Directory Runner
+
+The preferred workflow for `crimson_1d` is to keep source code and simulation cases
+separate. A case directory should contain the network XML and any auxiliary input files
+such as inflow CSV files. Outputs are written under a `results/` directory inside the
+case directory.
+
+Minimal layout:
+
+```text
+my_case/
+  input.xml
+  inflow.csv        # optional, only if the XML references it
+```
+
+Run from the case directory:
+
+```bash
+cd my_case
+conda activate starfish-py3
+python /path/to/starfish/solver.py input.xml
+```
+
+By default this writes:
+
+```text
+my_case/
+  results/
+    simulationCaseDescriptions.txt
+    SolutionData_001/
+      <networkName>_SolutionData_001.hdf5
+      <networkName>_SolutionData_001.xml
+```
+
+You can choose output names:
+
+```bash
+python /path/to/starfish/solver.py input.xml --output-prefix run_001 -d "first test"
+```
+
+which writes:
+
+```text
+my_case/
+  results/
+    simulationCaseDescriptions.txt
+    SolutionData_001/
+      run_001.hdf5
+      run_001.xml
+```
+
+Use `-n` to select the STARFiSh-style solution number:
+
+```bash
+python /path/to/starfish/solver.py input.xml -n 012 -d "mesh sensitivity"
+```
+
+which writes into `results/SolutionData_012/` and records the description in
+`results/simulationCaseDescriptions.txt`.
+
+Relative files referenced by `Flow-FromFile` are resolved relative to the input XML
+directory, so a case can be moved as one folder without editing source-code paths.
