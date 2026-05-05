@@ -86,9 +86,10 @@ def _write_description_index(results_dir, data_number, description):
         handle.writelines(lines)
 
 
-def run_case(input_xml, output_dir, output_prefix, data_number, description):
+def run_case(input_xml, output_dir, output_prefix, data_number, description, export_ascii=False, ascii_dir=None):
     import SolverLib.class1DflowSolver as c1DFlowSolv
     import UtilityLib.moduleXML as mXML
+    from UtilityLib.hdf5ToAscii import export_hdf5_to_ascii
 
     input_xml = os.path.abspath(input_xml)
     results_dir = os.path.abspath(output_dir)
@@ -142,6 +143,13 @@ def run_case(input_xml, output_dir, output_prefix, data_number, description):
     vascular_network.saveSolutionData()
     mXML.writeNetworkToXML(vascular_network, dataNumber=data_number, networkXmlFile=output_xml)
 
+    ascii_output_dir = None
+    if export_ascii:
+        ascii_output_dir = ascii_dir or os.path.join(solution_dir, "ascii")
+        exported_files = export_hdf5_to_ascii(output_hdf5, output_dir=ascii_output_dir, quiet=True)
+        logger.info("%-20s %s" % ("ASCII dir", ascii_output_dir))
+        logger.info("%-20s %s" % ("ASCII files", len(exported_files)))
+
     del flow_solver
     gc.collect()
 
@@ -150,7 +158,7 @@ def run_case(input_xml, output_dir, output_prefix, data_number, description):
     logger.info("Solving:        {:.3f} sec".format(time_solver_solve))
     logger.info("=====================================")
 
-    return output_hdf5, output_xml
+    return output_hdf5, output_xml, ascii_output_dir
 
 
 def main(argv=None):
@@ -189,12 +197,23 @@ def main(argv=None):
         default="crimson_1d run",
         help="Simulation description stored in output metadata.",
     )
+    parser.add_argument(
+        "--export-ascii",
+        action="store_true",
+        help="After the run, export every HDF5 dataset to CSV files.",
+    )
+    parser.add_argument(
+        "--ascii-dir",
+        default=None,
+        help="ASCII export directory. Default: <solution-dir>/ascii when --export-ascii is used.",
+    )
 
     args = parser.parse_args(argv)
     cwd = os.getcwd()
     log_path = _configure_logging(cwd)
     input_xml = _resolve_path(args.input_xml, cwd)
     output_dir = _resolve_path(args.output_dir, cwd)
+    ascii_dir = _resolve_path(args.ascii_dir, cwd)
 
     if not os.path.isfile(input_xml):
         if args.input_xml == "input.xml":
@@ -204,17 +223,21 @@ def main(argv=None):
             )
         parser.error("input XML file was not found: {}".format(input_xml))
 
-    output_hdf5, output_xml = run_case(
+    output_hdf5, output_xml, ascii_output_dir = run_case(
         input_xml=input_xml,
         output_dir=output_dir,
         output_prefix=args.output_prefix,
         data_number=args.data_number,
         description=args.description,
+        export_ascii=args.export_ascii,
+        ascii_dir=ascii_dir,
     )
 
     print("Simulation complete")
     print("  HDF5: {}".format(output_hdf5))
     print("  XML:  {}".format(output_xml))
+    if ascii_output_dir is not None:
+        print("  CSV:  {}".format(ascii_output_dir))
     print("  Log:  {}".format(log_path))
 
 

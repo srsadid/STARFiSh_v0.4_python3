@@ -96,6 +96,7 @@ bcTagsClassReferences = { # BoundaryConditions normal
                           'Pressure-Sinus'                   :'Sinus',
                           'Pressure-Sinus2'                  :'Sinus2',
                           'Pressure-RampMean'                :'RampMean',
+                          'Pressure-FromFile'                :'PressureFromFile',
                           'ReflectionCoefficient'            :'ReflectionCoefficient',
                           'ReflectionCoefficientTimeVarying' :'ReflectionCoefficientTimeVarying',
                           'Resistance'                       :'Resistance',
@@ -125,6 +126,7 @@ bcTagsClassReferences = { # BoundaryConditions normal
                           '_Pressure-Sinus'                   :'Sinus',
                           '_Pressure-Sinus2'                  :'Sinus2',
                           '_Pressure-RampMean'                :'RampMean',
+                          '_Pressure-FromFile'                :'PressureFromFile',
                           '_ReflectionCoefficient'            :'ReflectionCoefficient',
                           '_ReflectionCoefficientTimeVarying' :'ReflectionCoefficientTimeVarying',
                           '_Resistance'                       :'Resistance',
@@ -161,6 +163,7 @@ boundaryConditionElements = {
           'Pressure-Sinus'              :['amp','ampConst','Npulse','Tpulse','freq','Tspace','runtimeEvaluation','prescribe'],
           'Pressure-Sinus2'             :['amp','ampConst','Npulse','Tpulse','freq','Tspace','runtimeEvaluation','prescribe'],
           'Pressure-RampMean'           :['amp','ampConst','Npulse','Tpulse','freq','Tspace','runtimeEvaluation','prescribe'],
+          'Pressure-FromFile'           :['amp','ampConst','Npulse','Tpulse','freq','Tspace','runtimeEvaluation','filePathName','prescribe'],
           'Flow-Fourier'                :['amp','ampConst','Npulse','Tpulse','freq','Tspace','runtimeEvaluation','scale','prescribe'],
           'Flow-PhysiologicalData'      :['amp','ampConst','Npulse','Tpulse','freq','Tspace','runtimeEvaluation','prescribe'],
           'Flow-FromFile'               :['amp','ampConst','Npulse','Tpulse','freq','Tspace','runtimeEvaluation','filePathName','prescribe'],
@@ -186,6 +189,7 @@ boundaryConditionElements = {
           '_Pressure-Sinus'             :['amp','ampConst','Npulse','Tpulse','freq','Tspace','runtimeEvaluation','prescribe'],
           '_Pressure-Sinus2'            :['amp','ampConst','Npulse','Tpulse','freq','Tspace','runtimeEvaluation','prescribe'],
           '_Pressure-RampMean'          :['amp','ampConst','Npulse','Tpulse','freq','Tspace','runtimeEvaluation','prescribe'],
+          '_Pressure-FromFile'          :['amp','ampConst','Npulse','Tpulse','freq','Tspace','runtimeEvaluation','filePathName','prescribe'],
           '_ReflectionCoefficient'      :['Rt'],
           '_ReflectionCoefficientTimeVarying' : ['RtOpen','Topen1','Topen2','RtClosed','Tclosed1','Tclosed2'],
           '_Resistance'                 :['Rc'],
@@ -257,5 +261,4 @@ xmlElementsReference = {'simulationContext'     : simulationContextElements,
                         'measurementRoutine'     : None,
                         'vessels'               : vesselElements,
                         'venousPool' : None }
-
 

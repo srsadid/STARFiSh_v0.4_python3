@@ -749,6 +749,10 @@ class FlowFromFile(BoundaryConditionType1):
         expected units: t [s]; Q[m3 / s]
 
     """
+    fileColumn = 'Q'
+    fileBoundaryName = 'Flow-FromFile'
+    fileQuantityName = 'Flow'
+
     def __init__(self):
 
         BoundaryConditionType1.__init__(self)
@@ -759,6 +763,7 @@ class FlowFromFile(BoundaryConditionType1):
         self.networkDirectory = ''
         self.dataTime = []
         self.dataFlow = []
+        self.filePeriod = None
         self.loadedFile = False
 
     def loadFile(self, inflowFilePath=None):
@@ -782,31 +787,79 @@ class FlowFromFile(BoundaryConditionType1):
             self.filePathName = inflowFilePath
             reader = csv.DictReader(open(inflowFilePath, 'r', newline=''), delimiter=';')
         except Exception:
-            self.exception("boundaryConditions.FlowFromFile could not open file <<{}>> with boundary values, system exit".format(self.filePathName.split('/')[-1]))
+            self.exception("boundaryConditions.{} could not open file <<{}>> with boundary values, system exit".format(self.__class__.__name__, self.filePathName.split('/')[-1]))
         try:
             dataTime = []
-            dataFlow = []
+            dataValues = []
             for row in reader:
                 dataTime.append(float(row['t']))
-                dataFlow.append(float(row['Q']))
-            self.dataTime = np.asarray(dataTime)
-            self.dataFlow = np.asarray(dataFlow)
+                dataValues.append(float(row[self.fileColumn]))
+            sortIndex = np.argsort(dataTime)
+            self.dataTime = np.asarray(dataTime)[sortIndex]
+            self.dataFlow = np.asarray(dataValues)[sortIndex]
+            self.filePeriod = self.dataTime[-1] - self.dataTime[0]
+            if self.filePeriod <= 0.0:
+                raise ValueError("{} requires at least two increasing time values".format(self.fileBoundaryName))
             self.loadedFile = True
-        except Exception: self.warning("Old except: pass clause in ccBC.FlowFromFile.loadFile")
+        except Exception:
+            self.exception("boundaryConditions.{} could not parse file <<{}>> with boundary values. Expected columns: t;{}".format(self.__class__.__name__, self.filePathName.split('/')[-1], self.fileColumn))
 
+    def initialize(self, bcDict):
+        self.update(bcDict)
+        if 'Flow' in self.name:
+            self.duMatrix = np.array([0, 1])
+            self.conditionQuantity = 'Flow'
+        elif 'Pressure' in self.name:
+            self.duMatrix = np.array([1, 0])
+            self.conditionQuantity = 'Pressure'
+        BoundaryConditionType1.initialize(self, bcDict)
+        if self.loadedFile == False:
+            self.loadFile()
+        if self.filePeriod is not None:
+            self.Tperiod = self.filePeriod
+            self.freq = 1.0 / self.filePeriod
+            self.Tspace = 0.0
+        self.lastU = self.calculateOneStep(0, 0)
+
+    def calculateOneStep(self, n, dt, initPhase=False):
+        t = n * dt
+        if initPhase == True:
+            t = t + self.TmeanFlow
+        if t < self.Tpulse:
+            return self.ampConst * self.duMatrix
+        value = self._periodicFlow(t - self.Tpulse)
+        return (self.ampConst + value) * self.duMatrix
+
+    def _periodicFlow(self, elapsedTime):
+        if self.loadedFile == False:
+            self.loadFile()
+        dataStart = self.dataTime[0]
+        if self.filePeriod is None or self.filePeriod <= 0.0:
+            return np.interp(dataStart, self.dataTime, self.dataFlow)
+        periodicTime = dataStart + np.mod(elapsedTime, self.filePeriod)
+        return np.interp(periodicTime, self.dataTime, self.dataFlow)
 
     def function1(self, t, t0, pulsNum):
-        # set up simulation time (needed here if freq changes after init known to slow down)
-        self.timeData = np.linspace(min(self.dataTime), max(self.dataTime), 2000)
-        self.timeSim = np.linspace(0.0, 1. / self.freq, 2000)
-        # reset time to fit in array [0 , 1/freq]
-        tReset = t - t0
-        # interpolate time to dataTime
-        tInter = np.interp(tReset, self.timeSim, self.timeData)
-        # interpolate the Q value from data and dataTime
-        Q = np.interp(tInter, self.dataTime, self.dataFlow)
-        # P = np.interp(t-pulseNumber*self.tmax,self.data.t,self.data.P)
-        return Q * self.duMatrix
+        value = self._periodicFlow(t - t0)
+        return value * self.duMatrix
+
+
+class PressureFromFile(FlowFromFile):
+    """
+    Boundary profile - type 1
+
+        creates a periodic pressure signal based on data values stored in a
+        semicolon-delimited CSV file.
+
+        first line of the columns must be t and P respectively:
+        t;P
+        ..; ..
+
+        expected units: t [s]; P [Pa]
+    """
+    fileColumn = 'P'
+    fileBoundaryName = 'Pressure-FromFile'
+    fileQuantityName = 'Pressure'
 
 
 ########################################################################################
