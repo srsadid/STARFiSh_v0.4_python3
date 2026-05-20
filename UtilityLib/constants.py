@@ -353,7 +353,6 @@ variablesDict = {## class Vascular Network
                  'Rtilde'            : {'type':'float None',      'unitSI': 'Pa s m-3', 'strCases': None, 'multiVar': False},
                  'S'                 : {'type':'float None',      'unitSI': 'Pa',       'strCases': None, 'multiVar': False},
                  'surfaceId'         : {'type':'int',             'unitSI': None,       'strCases': None, 'multiVar': False},
-                 'netlistFile'       : {'type':'str',             'unitSI': None,       'strCases': ['anything'], 'multiVar': False},
                  'flowSign'          : {'type':'float',           'unitSI': None,       'strCases': None, 'multiVar': False},
                  'Z'                 : {'type':'float str',       'unitSI': 'Pa s m-3', 'strCases': ['VesselImpedance'], 'multiVar': False},
                  'C'                 : {'type':'float',           'unitSI': 'm3 Pa-1',  'strCases': None, 'multiVar': False},

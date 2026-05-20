@@ -484,6 +484,14 @@ class FlowSolver(cSBO.StarfishBaseObject):
     ########################################################################################
     """
 
+    def finalizeNetlistTimestep(self, n):
+        """
+        Advance the global CRIMSON netlist once after all STARFiSh boundary
+        objects have recorded their final pressure/flow for timestep n.
+        """
+        from NetworkLib.netlistManager import get_default_netlist_manager
+        get_default_netlist_manager().finalize_timestep(n)
+
     def MacCormack_Field(self):
         """
         MacCormack solver method with forward-euler time steping,
@@ -520,6 +528,14 @@ class FlowSolver(cSBO.StarfishBaseObject):
                         logger.critical("Success in saving solution data file. Reraising Exception")
                         raise # TODO: why does self.exception() not force the program to quit?
                         # self.exception()
+
+                try:
+                    self.finalizeNetlistTimestep(n)
+                except Exception:
+                    logger.critical("Exception caught while finalizing netlist boundary manager")
+                    self.vascularNetwork.runtimeMemoryManager.flushSolutionMemory()
+                    self.vascularNetwork.saveSolutionData()
+                    raise
                 
                 if self.quiet == False:
                     progressLog.progress(n)
@@ -550,6 +566,7 @@ class FlowSolver(cSBO.StarfishBaseObject):
                     self.currentTimeStep[0] = n
                     for numericalObject in self.numericalObjects:
                         numericalObject()
+                    self.finalizeNetlistTimestep(n)
                 # 2. check for steady state
                 if self.quiet == False:
                     for vesselId in list(self.vessels.keys()):

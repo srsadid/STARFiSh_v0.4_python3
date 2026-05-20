@@ -20,10 +20,15 @@ try:
     xml_path = "/home/sadid/starfish/examples/baseline_netlist_from_xml/netlist_surfaces.xml"
     
     print("--- [Python] Calling bridge.load('{}') ---".format(xml_path))
-    bridge.load(xml_path)
+    previous_cwd = os.getcwd()
+    try:
+        os.chdir(os.path.dirname(xml_path))
+        bridge.load(xml_path, [0])
+    finally:
+        os.chdir(previous_cwd)
     print("--- [Python] Load call finished ---")
 
-    coeffs = bridge.compute_implicit_coefficients(1, 0.01, 0.01, 1.0e-5)
+    coeffs = bridge.compute_implicit_coefficients(0, 1, 0.01, 0.01, 1.0e-5)
     print("--- [Python] Coefficients: dp_dq={}, Hop={} ---".format(coeffs[0], coeffs[1]))
 
 except Exception as e:

@@ -21,7 +21,7 @@ class CrimsonStyleProgress(object):
         self.logger = logging.getLogger(loggerName)
         self.startTime = time.perf_counter()
         self.lastLogged = None
-        self.logger.info(" iter   sim_time   progress  ( pct)      dt          wall_s    < step-total| rem> [ mem - cyc]")
+        self.logger.info(" sim_time        dt      wall_s")
 
     def progress(self, currentIteration):
         currentIteration = int(currentIteration)
@@ -40,24 +40,13 @@ class CrimsonStyleProgress(object):
 
         self.lastLogged = currentIteration
         simTime = currentIteration * self.dt
-        progress = float(currentIteration + 1) / float(self.nIterations)
         wallTime = time.perf_counter() - self.startTime
-        remaining = max(finalIteration - currentIteration, 0)
-        percent = int(round(progress * 100.0))
 
         self.logger.info(
-            "%5d %9.3E %9.3E  (%4d) %11.3E %11.3E  <%6d-%-5d|%4d> [%4d -%4d]",
-            1,
+            "%9.3E %9.3E %11.3E",
             simTime,
-            progress,
-            percent,
             self.dt,
             wallTime,
-            currentIteration + 1,
-            self.nIterations,
-            remaining,
-            0,
-            0,
         )
 
 class ProgressBar(object):

@@ -8,15 +8,19 @@ The first user-facing boundary condition should be named simply:
 ```xml
 <_Netlist>
   <surfaceId>0</surfaceId>
-  <netlistFile>netlist_surfaces.xml</netlistFile>
-  <flowSign>1</flowSign>
 </_Netlist>
 ```
 
 The real netlist circuit description is not parsed by STARFiSh. It remains a
 CRIMSON netlist input file and is handled by CRIMSON's own netlist XML reader.
-The STARFiSh XML only maps a 1D vessel boundary to a netlist surface and points
-to the netlist file.
+The STARFiSh XML only maps a 1D vessel boundary to a netlist surface. The
+netlist file name is intentionally fixed:
+
+```text
+netlist_surfaces.xml
+```
+
+and that file must live in the same case directory as STARFiSh `input.xml`.
 
 For early testing, `_Netlist` may also support a temporary constant-coefficient
 mode:
@@ -81,7 +85,7 @@ class Netlist(BoundaryConditionType2)
 Responsibilities:
 
 - receives XML fields already parsed by STARFiSh:
-  `surfaceId`, `netlistFile`, `flowSign`, `Rtilde`, `S`
+  `surfaceId`, plus optional `flowSign`, `Rtilde`, `S`
 - registers the boundary with `NetlistBoundaryManager`
 - creates `NetlistBoundaryInterface`
 - delegates each solver boundary call to the interface layer
@@ -167,6 +171,16 @@ class NetlistBoundaryManager
 Responsibilities:
 
 - stores all registered netlist boundaries by `surfaceId`
+- owns one global netlist file for the whole case:
+
+  ```text
+  <case directory>/netlist_surfaces.xml
+  ```
+
+  This matches CRIMSON's `numNetlistLPNSrfs` / `indicesOfNetlistSurfaces(k)`
+  model: one file contains all outlet circuits, while each STARFiSh boundary
+  only says which `surfaceId` it maps to.
+
 - supports fake constant mode for quick tests:
 
   ```text
@@ -181,7 +195,7 @@ Responsibilities:
 
 - records final `(P, Q)` after the 1D characteristic solve
 - forwards final state to CRIMSON in real mode
-- finalizes all loaded adapters once per timestep when called
+- finalizes the one loaded adapter once per timestep when called
 
 Important methods:
 
@@ -327,10 +341,9 @@ Responsibilities:
 
   ```text
   surfaceId
-  netlistFile
-  flowSign
-  Rtilde
-  S
+  flowSign  optional, defaults to 1
+  Rtilde    optional, defaults to None
+  S         optional, defaults to 0
   ```
 
 `Rtilde` and `S` are allowed to be `None` so the same XML structure can run in
@@ -353,10 +366,12 @@ resistance.
 
 ## Data Flow Schematic
 
+Current implemented flow:
+
 ```text
 STARFiSh input.xml
   |
-  |  vesselId, boundary position, surfaceId, netlistFile,
+  |  vesselId, boundary position, surfaceId,
   |  flowSign, optional Rtilde/S
   v
 classBoundaryConditions.Netlist
@@ -395,9 +410,18 @@ P^{n+1}, Q^{n+1}
   |
 NetlistBoundaryManager records final interface state
   |
-  |  real mode: adapter.update_state(...)
+  |  real mode: queue final P/Q by surfaceId
   v
-CRIMSON updates netlist state from final interface P/Q
+class1DflowSolver finishes all numerical objects for timestep n
+  |
+  |  finalizeNetlistTimestep(n)
+  v
+NetlistBoundaryManager pushes all queued final P/Q values
+  |
+  |  adapter.update_state(...) for every pending surface
+  |  adapter.finalize_timestep(n) once
+  v
+CRIMSON advances/finalizes the global netlist state once for timestep n
 ```
 
 The important separation is:
@@ -413,6 +437,25 @@ Python interface:
   translates between 1D characteristic variables and CRIMSON's P/Q law.
 ```
 
+The end-of-timestep split is intentional. Each 1D boundary solves its own
+characteristic problem and records the final interface state, but no boundary
+condition object should independently advance the global netlist. The flow
+solver is the only place that knows all boundary objects have run for timestep
+`n`, so it calls:
+
+```python
+FlowSolver.finalizeNetlistTimestep(n)
+```
+
+That call flushes every pending surface update to the one shared adapter and
+then finalizes CRIMSON once. This mirrors the CRIMSON pattern:
+
+```text
+compute interface law during the flow solve
+collect final interface flow/pressure
+update/finalize the netlist once at the end of the timestep
+```
+
 ## Milestone 1: XML Visibility
 
 Goal: prove the solver can read a `Netlist` boundary condition from `input.xml`.
@@ -423,11 +466,12 @@ Implementation steps:
 2. Register XML fields:
 
    ```python
-   ["surfaceId", "netlistFile", "flowSign", "Rtilde", "S"]
+   ["surfaceId", "flowSign", "Rtilde", "S"]
    ```
 
-   `Rtilde` and `S` are optional testing fields. In the real coupled mode, the
-   CRIMSON netlist wrapper provides them as `(dp_dq, Hop)`.
+   `flowSign`, `Rtilde`, and `S` are optional for `_Netlist`.
+   In the real coupled mode, omit `Rtilde` and `S`; the CRIMSON netlist wrapper
+   provides them as `(dp_dq, Hop)`.
 
 3. Add a skeletal Type 2 class in `NetworkLib/classBoundaryConditions.py`:
 
@@ -436,10 +480,10 @@ Implementation steps:
        def __init__(self):
            self.type = 2
            self.surfaceId = None
-           self.netlistFile = None
-           self.flowSign = 1
+           self.networkDirectory = None
+           self.flowSign = 1.0
            self.Rtilde = None
-           self.S = None
+           self.S = 0.0
    ```
 
 4. Load a case and verify that the object is created with the expected parsed
@@ -467,9 +511,9 @@ with:
 
 ```xml
 <_Netlist>
+  <surfaceId>0</surfaceId>
   <Rtilde unit="Pa s m-3">133320000.0</Rtilde>
   <S unit="Pa">0.0</S>
-  <surfaceId>0</surfaceId>
 </_Netlist>
 ```
 
@@ -600,7 +644,7 @@ Manager-level conceptual API:
 
 ```python
 class NetlistBoundaryManager:
-    def load(self, netlist_file):
+    def set_netlist_file(self, netlist_file):
         ...
 
     def register_boundary(self, surface_id, vessel_id, position):
@@ -628,6 +672,67 @@ The reason to add this layer early is that real netlists can couple multiple
 surfaces. Each boundary condition should not independently own or finalize a
 separate netlist.
 
+## Current Python-Side Roles
+
+The current code is intentionally split into four small roles.
+
+```text
+NetworkLib/classBoundaryConditions.py
+```
+
+This is the STARFiSh entry point. `Netlist` is a Type 2 boundary condition, but
+it should stay thin. Its job is to receive parsed XML values, identify the
+vessel end (`position`), register the boundary once, and call the interface
+solver every time STARFiSh evaluates that boundary.
+
+```text
+NetworkLib/netlistInterface.py
+```
+
+This owns the numerical 1D/0D interface math. It asks for `(dp_dq, Hop)`, solves
+the unknown characteristic, returns `du = [dP, dQ]`, and records the final
+interface state. This is where any future nonlinear characteristic solve should
+live if the CRIMSON side exposes a residual instead of an affine law.
+
+```text
+NetworkLib/netlistManager.py
+```
+
+This owns case-level netlist state. There is one global netlist file,
+`netlist_surfaces.xml`, and many possible STARFiSh boundaries mapped by
+`surfaceId`. The manager registers those mappings, chooses fake constant mode
+versus real CRIMSON mode, queues final boundary states, and finalizes the
+adapter once per timestep.
+
+The manager is deliberately different from the adapter:
+
+```text
+manager = STARFiSh coupling coordinator
+adapter = thin Python wrapper over compiled C++
+```
+
+```text
+UtilityLib/crimsonNetlistAdapter.py
+```
+
+This file should contain no 1D solver logic. It imports the compiled
+`crimson_starfish_bridge` module, loads the fixed CRIMSON XML file, asks C++ for
+coefficients, pushes final pressure/flow values, and calls finalization. It is
+the only Python file that should know about the compiled binding details.
+
+```text
+SolverLib/class1DflowSolver.py
+```
+
+This owns timestep-level finalization. After every numerical object has run for
+a timestep, it calls:
+
+```python
+get_default_netlist_manager().finalize_timestep(n)
+```
+
+That is the point where pending surface states become CRIMSON netlist state.
+
 ## Milestone 4: Single-Surface C++ Bridge
 
 Once `_Netlist` matches `_Resistance`, replace the fake manager coefficients
@@ -636,7 +741,7 @@ with a C++ bridge.
 Minimum bridge API:
 
 ```python
-load(netlist_file)
+load()
 compute_implicit_coefficients(surface_id, timestep, time, dt, q_current)
 update_state(surface_id, timestep, time, dt, p_final, q_final)
 finalize_timestep(timestep)
@@ -651,15 +756,43 @@ Rtilde, S
 The STARFiSh boundary condition should not care whether these values came from
 XML constants, a fake Python object, or the CRIMSON netlist solver.
 
-In real mode, `netlist_file` is a CRIMSON netlist XML file such as:
+In real mode, the CRIMSON netlist XML file is fixed to:
 
 ```text
 netlist_surfaces.xml
 ```
 
+in the same directory as STARFiSh `input.xml`.
+
 STARFiSh should not parse the circuit topology, components, prescribed nodal
 pressures, component flows, diode states, or capacitor histories. That logic
 belongs inside CRIMSON's netlist code.
+
+Current C++ bridge status:
+
+```text
+ext/StarfishBridge.cpp
+```
+
+is the active build target for STARFiSh. It is intentionally kept in the
+STARFiSh `ext/` tree so this project can be built and tested without modifying
+CRIMSON's SCons build chain. The current bridge stores one `SurfaceState` per
+STARFiSh `surfaceId` and uses one direct CRIMSON `NetlistCircuit` per surface:
+
+```text
+current:
+  one global netlist_surfaces.xml
+  many registered surface states
+  surfaceId -> direct NetlistCircuit mapping
+  coefficient lookup per surface
+  delayed global finalization after all surfaces update
+```
+
+The important remaining caveat is that `surfaceId` is used as the STARFiSh-side
+surface key and CRIMSON output surface index, while the CRIMSON XML circuit is
+selected by construction order. The manager passes sorted registered surface IDs
+at load time so the mapping is deterministic. We still need explicit validation
+against real CRIMSON `indicesOfNetlistSurfaces` cases.
 
 ## CRIMSON Netlist File Ownership
 
@@ -669,25 +802,21 @@ The relevant CRIMSON source directory is:
 /home/sadid/crimson/cfs_reg/CRIMSONFlowsolver/flowsolver/src/
 ```
 
-The netlist XML reader is currently built around the CRIMSON convention that the
-input file is named:
+The STARFiSh side now follows the CRIMSON convention directly. The input file
+is always named:
 
 ```text
 netlist_surfaces.xml
 ```
 
-Until that singleton/path behavior is refactored, the wrapper should either:
-
-1. stage/copy the user-provided `<netlistFile>` to the expected filename in the
-   run directory, or
-2. modify the CRIMSON netlist reader/wrapper so it accepts an explicit file
-   path.
+and it must be placed next to STARFiSh `input.xml` in the case directory.
+STARFiSh should not accept per-boundary netlist filenames in `input.xml`; that
+keeps case layout predictable and avoids path ambiguity.
 
 The STARFiSh `input.xml` should only contain:
 
 ```text
 surfaceId
-netlistFile
 flowSign
 ```
 
@@ -748,10 +877,23 @@ NetlistZeroDDomainCircuit.hxx
 NetlistZeroDDomainCircuit.cxx
 ```
 
-For the first 1D coupling, prefer using the CRIMSON boundary-condition wrapper
-layer through `NetlistBoundaryCondition` or `BoundaryConditionFactory`, because
-that is closest to how CRIMSON already computes `(dp_dq, Hop)` for the higher
+The ideal long-term path is to use the CRIMSON boundary-condition wrapper layer
+through `NetlistBoundaryCondition` or `BoundaryConditionFactory`, because that
+is closest to how CRIMSON already computes `(dp_dq, Hop)` for the higher
 dimensional solver.
+
+Current practical path:
+
+```text
+ext/StarfishBridge.cpp -> NetlistCircuit directly
+```
+
+We tried the wrapper-layer route first, but importing the rebuilt Python 3
+extension failed with an unresolved `PyString_FromString` symbol. That symbol
+comes from older CRIMSON Python-control-system code pulled in by the fuller
+boundary-condition wrapper path. Until that is isolated or ported cleanly, the
+active bridge uses `NetlistCircuit` directly while preserving the same Python
+API and timestep flow.
 
 ## C++ Calling Shape
 
@@ -806,20 +948,17 @@ bc.updateLPN(timestepNumber);
 bc.finaliseAtEndOfTimestep();
 ```
 
-The Python adapter should hide this C++ sequence behind a small API:
+The Python adapter hides the C++ sequence behind a small API:
 
 ```python
 class CrimsonNetlistAdapter:
-    def load(self, netlist_file, surface_ids, dt, alfi, hstep=1):
-        ...
-
-    def begin_timestep(self, timestep, time, dt):
+    def load(self, dt=None):
         ...
 
     def compute_implicit_coefficients(self, surface_id, timestep, time, dt, flow):
         return dp_dq, hop
 
-    def set_final_state(self, surface_id, pressure, flow):
+    def update_state(self, surface_id, timestep, time, dt, pressure, flow):
         ...
 
     def finalize_timestep(self, timestep):
@@ -834,6 +973,24 @@ Current prototype files:
 /home/sadid/crimson/cfs_reg/CRIMSONFlowsolver/flowsolver/src/Netlist1DWrapper.hxx
 /home/sadid/crimson/cfs_reg/CRIMSONFlowsolver/flowsolver/src/Netlist1DWrapper.cxx
 ```
+
+These files are useful design references, but they do not have to become the
+active wrapper. For this project, the cleaner build path is:
+
+```text
+STARFiSh owns:
+  ext/StarfishBridge.cpp
+  ext/bindings.cpp
+  ext/CMakeLists.txt
+
+CRIMSON source provides:
+  netlist classes included/linked by the STARFiSh extension
+```
+
+This avoids adding experimental 1D code to CRIMSON's main source tree and avoids
+threading a prototype through CRIMSON's SCons build. If `Netlist1DWrapper` has a
+better internal call sequence, copy the idea into `ext/StarfishBridge.cpp`
+rather than making STARFiSh depend on that file directly.
 
 Current wrapper shape:
 
@@ -860,6 +1017,15 @@ This is aligned with the 1D coupling plan because it already returns:
 (Rtilde, S) == (dp_dq, Hop)
 ```
 
+The useful ideas to borrow are:
+
+- Store one `SurfaceState` per CRIMSON surface.
+- Give each state its own pressure and flow scalar whose addresses are passed to
+  `NetlistBoundaryCondition`.
+- Use `BoundaryConditionFactory` / `NetlistBoundaryCondition`, because that is
+  closest to the real CRIMSON 3D path.
+- Begin a timestep once, compute coefficients as needed, then finalize once.
+
 Important limitations to address before multi-surface use:
 
 - `updateState()` finalizes the timestep immediately. For multiple surfaces,
@@ -877,8 +1043,46 @@ Important limitations to address before multi-surface use:
 
 - Sign convention must be verified. We need a clear rule for whether positive
   STARFiSh `Q` means flow leaving the 1D domain or entering the netlist.
-- Netlist file discovery should be explicit. The STARFiSh case directory should
-  provide `netlist_surfaces.xml` or a path through `<netlistFile>`.
+- Netlist file discovery is deliberately fixed. The STARFiSh case directory
+  must provide `netlist_surfaces.xml` next to `input.xml`.
+
+Recommended bridge shape for the next implementation:
+
+```cpp
+class StarfishBridge {
+public:
+    void load(const std::string& netlist_xml_path,
+              const std::vector<int>& surface_ids);
+
+    std::pair<double, double> compute_implicit_coefficients(
+        int surface_id,
+        int timestep,
+        double time,
+        double dt,
+        double flow);
+
+    void update_state(
+        int surface_id,
+        int timestep,
+        double time,
+        double dt,
+        double pressure,
+        double flow);
+
+    void finalize_timestep(int timestep);
+
+private:
+    struct SurfaceState {
+        double pressure;
+        double flow;
+        boost::shared_ptr<NetlistBoundaryCondition> bc;
+    };
+
+    std::map<int, SurfaceState> surfaces_;
+};
+```
+
+The Python API can remain stable while the C++ implementation changes.
 
 ## Milestone 5: Multi-Surface Coupling
 

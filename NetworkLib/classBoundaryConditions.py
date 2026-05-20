@@ -1,7 +1,7 @@
-import numpy as np
+import numpy as np # type: ignore
 import csv
 from math import exp
-import scipy.optimize as so
+import scipy.optimize as so # type: ignore
 from . import ODESolver as OD
 
 import os, sys
@@ -1364,7 +1364,7 @@ class Netlist(BoundaryConditionType2):
         self.type = 2
         self.vesselId = None
         self.surfaceId = None
-        self.netlistFile = None
+        self.networkDirectory = None
         self.flowSign = 1.0
         self.Rtilde = None
         self.S = 0.0
@@ -1390,11 +1390,15 @@ class Netlist(BoundaryConditionType2):
     def _ensure_interface(self):
         if self.surfaceId is None:
             raise ValueError("Netlist boundary requires surfaceId.")
+        if self.networkDirectory is None:
+            netlist_file = "netlist_surfaces.xml"
+        else:
+            netlist_file = os.path.join(self.networkDirectory, "netlist_surfaces.xml")
         self.manager.register_boundary(
             self.surfaceId,
             vessel_id=self.vesselId,
             position=self.position,
-            netlist_file=self.netlistFile,
+            netlist_file=netlist_file,
             flow_sign=self.flowSign,
             rtilde=self.Rtilde,
             s=self.S,

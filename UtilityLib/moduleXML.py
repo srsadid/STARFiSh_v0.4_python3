@@ -353,8 +353,10 @@ def loadNetworkFromXML(networkName ,
                         # find all bcs of this type
                         for bcElements in boundaryConditionElement.findall(''.join(['.//',boundaryType])):
                             boundaryInstance = eval(nxml.bcTagsClassReferences[boundaryType])()
+                            networkDirectory = '/'.join(networkXmlFile.split('/')[0:-1])
                             boundaryDataDict = {"vesselId":vesselId}
                             boundaryDataDict['name'] = boundaryType
+                            boundaryDataDict['networkDirectory'] = networkDirectory
                             # loop through all variables of this type, convert and save values of these
                             for variable in nxml.xmlElementsReference[xmlElementName][boundaryType]:
                                 # find normal variables
@@ -366,16 +368,23 @@ def loadNetworkFromXML(networkName ,
                                     # get unit
                                     try: variableUnit = element.attrib['unit']
                                     except: variableUnit = None
-                                except: loadingErrorMessageVariableError(variable, 'boundaryCondition', boundaryType)
+                                except:
+                                    if boundaryType in ['Netlist', '_Netlist'] and variable in ['flowSign', 'Rtilde', 'S']:
+                                        if variable == 'flowSign':
+                                            boundaryDataDict[variable] = 1.0
+                                        elif variable == 'S':
+                                            boundaryDataDict[variable] = 0.0
+                                        else:
+                                            boundaryDataDict[variable] = None
+                                        continue
+                                    loadingErrorMessageVariableError(variable, 'boundaryCondition', boundaryType)
                                 # save converted XML-value
                                 boundaryDataDict[variable] = loadVariablesConversion(variable, variableValueStr, variableUnit)
 
                                 # adjust path to boundary condition file
                                 if variable == 'filePathName':
                                     ## TODO: fix problem when loading an absolute path
-                                    networkDirectory = '/'.join(networkXmlFile.split('/')[0:-1])
                                     # variableValueStr = '/'.join([networkDirectory,variableValueStr])
-                                    boundaryDataDict['networkDirectory'] = networkDirectory
                                     boundaryDataDict['filePathName'] = variableValueStr
 
                             boundaryInstance.update(boundaryDataDict)
@@ -536,9 +545,6 @@ def loadNetworkFromXML(networkName ,
                 vascularNetwork.update(vascularNetworkData)
 
     return vascularNetwork
-
-
-
 
 
 

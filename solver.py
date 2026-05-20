@@ -146,9 +146,7 @@ def run_case(input_xml, output_dir, output_prefix, data_number, description, exp
     ascii_output_dir = None
     if export_ascii:
         ascii_output_dir = ascii_dir or os.path.join(solution_dir, "ascii")
-        exported_files = export_hdf5_to_ascii(output_hdf5, output_dir=ascii_output_dir, quiet=True)
-        logger.info("%-20s %s" % ("ASCII dir", ascii_output_dir))
-        logger.info("%-20s %s" % ("ASCII files", len(exported_files)))
+        export_hdf5_to_ascii(output_hdf5, output_dir=ascii_output_dir, quiet=True)
 
     del flow_solver
     gc.collect()
@@ -223,7 +221,7 @@ def main(argv=None):
             )
         parser.error("input XML file was not found: {}".format(input_xml))
 
-    output_hdf5, output_xml, ascii_output_dir = run_case(
+    run_case(
         input_xml=input_xml,
         output_dir=output_dir,
         output_prefix=args.output_prefix,
@@ -234,11 +232,6 @@ def main(argv=None):
     )
 
     print("Simulation complete")
-    print("  HDF5: {}".format(output_hdf5))
-    print("  XML:  {}".format(output_xml))
-    if ascii_output_dir is not None:
-        print("  CSV:  {}".format(ascii_output_dir))
-    print("  Log:  {}".format(log_path))
 
 
 if __name__ == "__main__":
